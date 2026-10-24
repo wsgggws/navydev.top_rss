@@ -18,7 +18,7 @@ jobs:
 
     env:
       DEPLOY_PATH: /var/www/navydev.top/rss
-      STAGING_PATH: /tmp/rss.navydev.top-${{ github.sha }}
+      STAGING_PATH: /tmp/navydev.top_rss-${{ github.sha }}
 
     steps:
       - name: Checkout

@@ -2,8 +2,8 @@
 
 一个专注于阅读体验的轻量 RSS 阅读器。前端完全使用 React、TypeScript 和 Vite 构建，对接独立的 FastAPI 后端获取订阅源，并在新标签页打开文章原始 URL。
 
-- 线上地址：<https://rss.navydev.top/>
-- 后端仓库：<https://github.com/wsgggws/api.rss.navydev.top>
+- 线上地址：<https://navydev.top/rss>
+- 后端仓库：<https://github.com/wsgggws/navydev.top_api.rss>
 
 ## 功能
 
