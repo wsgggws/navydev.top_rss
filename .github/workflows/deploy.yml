@@ -6,53 +6,76 @@ on:
       - main
     tags:
       - "v*.*.*"
-  pull_request:
-    branches:
-      - main
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    concurrency:
+      group: deploy-rss-navydev-top
+      cancel-in-progress: true
+    permissions:
+      contents: read
+
+    env:
+      DEPLOY_PATH: /var/www/navydev.top/rss
+      STAGING_PATH: /tmp/rss.navydev.top-${{ github.sha }}
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v3
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
           node-version: 20
+          cache: npm
 
       - name: Install dependencies
         run: npm ci
 
       - name: Build project
-        run: VITE_API_BASE_URL=/backend npm run build
+        run: npm run build
 
-      - name: Setup SSH
-        uses: webfactory/ssh-agent@v0.5.3
+      - name: Package release
+        run: |
+          mkdir -p release
+          tar -C dist -czf release/site.tgz .
+
+      - name: Setup SSH agent
+        uses: webfactory/ssh-agent@v0.9.0
         with:
           ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
 
       - name: Add server to known hosts
         run: |
+          mkdir -p ~/.ssh
           ssh-keyscan -H ${{ secrets.REMOTE_IP }} >> ~/.ssh/known_hosts
 
-      - name: Copy files to server via SCP
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.REMOTE_IP }}
-          username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          source: "config/nginx/conf.d/*,dist/*"
-          target: "$HOME/deploy/rss.navydev.top/"
-          strip_components: 0
-          overwrite: true
-
-      - name: 🚀 Deploy on server
+      - name: Create remote staging directory
         run: |
-          ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.REMOTE_IP }} <<'EOF'
-            sudo cp -r $HOME/deploy/rss.navydev.top/dist/* /usr/share/nginx/html/rss.navydev.top/
-            sudo cp $HOME/deploy/rss.navydev.top/config/nginx/conf.d/*.conf /etc/nginx/conf.d/
-            sudo nginx -t && sudo systemctl reload nginx
+          ssh "${{ secrets.SSH_USER }}@${{ secrets.REMOTE_IP }}" \
+            "rm -rf '${STAGING_PATH}' && mkdir -p '${STAGING_PATH}'"
+
+      - name: Upload release
+        run: |
+          scp release/site.tgz \
+            "${{ secrets.SSH_USER }}@${{ secrets.REMOTE_IP }}:${STAGING_PATH}/"
+
+      - name: Activate release
+        run: |
+          ssh "${{ secrets.SSH_USER }}@${{ secrets.REMOTE_IP }}" \
+            "DEPLOY_PATH='${DEPLOY_PATH}' STAGING_PATH='${STAGING_PATH}' bash -s" <<'EOF'
+            set -euo pipefail
+
+            SUDO=""
+            if [ "$(id -u)" -ne 0 ]; then
+              SUDO="sudo"
+            fi
+
+            release_dir="$(mktemp -d)"
+            tar -xzf "${STAGING_PATH}/site.tgz" -C "${release_dir}"
+            ${SUDO} mkdir -p "${DEPLOY_PATH}"
+            ${SUDO} find "${DEPLOY_PATH}" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+            ${SUDO} cp -a "${release_dir}/." "${DEPLOY_PATH}/"
+            rm -rf "${release_dir}" "${STAGING_PATH}"
           EOF

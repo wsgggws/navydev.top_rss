@@ -3,6 +3,8 @@ import react from '@vitejs/plugin-react'
 import { viteMockServe } from 'vite-plugin-mock'
 
 export default defineConfig(({ command, mode }) => ({
+  // 站点挂在 https://navydev.top/rss/；API 由 nginx 转到 /rss/backend/。
+  base: '/rss/',
   plugins: [
     react(),
     ...(command === 'serve' && mode !== 'test'
